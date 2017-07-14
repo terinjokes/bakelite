@@ -9,6 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+
+	"github.com/neelance/parallel"
 )
 
 type Arch string
@@ -111,37 +114,46 @@ func main() {
 		os.Exit(-1)
 	}
 
+	parallelJobs := runtime.NumCPU()
+	par := parallel.NewRun(parallelJobs)
+	fmt.Printf("info: running bakelite with %d jobs\n", parallelJobs)
+
 	for _, platform := range platforms {
 		for _, pkg := range packages {
-			name := fmt.Sprintf("%s-%s-%s", filepath.Base(pkg), platform.OS, platform.Arch)
-			env := kvs{
-				"GOOS":   string(platform.OS),
-				"GOARCH": string(platform.Arch),
-				"GOROOT": os.Getenv("GOROOT"),
-				"GOPATH": os.Getenv("GOPATH"),
-			}
+			par.Acquire()
+			go func(platform Platform, pkg string) {
+				defer par.Release()
+				name := fmt.Sprintf("%s-%s-%s", filepath.Base(pkg), platform.OS, platform.Arch)
+				env := kvs{
+					"GOOS":   string(platform.OS),
+					"GOARCH": string(platform.Arch),
+					"GOROOT": os.Getenv("GOROOT"),
+					"GOPATH": os.Getenv("GOPATH"),
+				}
 
-			if cgo {
-				env["CGO_ENABLED"] = "1"
-			} else {
-				env["CGO_ENABLED"] = "0"
-			}
+				if cgo {
+					env["CGO_ENABLED"] = "1"
+				} else {
+					env["CGO_ENABLED"] = "0"
+				}
 
-			var stdout bytes.Buffer
-			var stderr bytes.Buffer
+				var stdout bytes.Buffer
+				var stderr bytes.Buffer
 
-			cmd := exec.CommandContext(context.Background(), "go", "build", "-o", name, pkg)
-			cmd.Env = env.Strings()
-			cmd.Stdout = &stdout
-			cmd.Stderr = &stderr
+				cmd := exec.CommandContext(context.Background(), "go", "build", "-o", name, pkg)
+				cmd.Env = env.Strings()
+				cmd.Stdout = &stdout
+				cmd.Stderr = &stderr
 
-			fmt.Printf("info: Running build for %s @ %s/%s…\n", pkg, platform.OS, platform.Arch)
-			err := cmd.Run()
+				fmt.Printf("info: Running build for %s @ %s/%s…\n", pkg, platform.OS, platform.Arch)
+				err := cmd.Run()
 
-			if err != nil {
-				log.Printf("fatal: There was an error! err='%s' stdout='%s' stderr='%s'", err, stdout.String(), stderr.String())
-				os.Exit(-1)
-			}
+				if err != nil {
+					log.Printf("fatal: There was an error! err='%s' stdout='%s' stderr='%s'", err, stdout.String(), stderr.String())
+					os.Exit(-1)
+				}
+			}(platform, pkg)
 		}
 	}
+	par.Wait()
 }
