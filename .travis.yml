@@ -1,4 +1,6 @@
 language: go
+dist: trusty
+sudo: false
 go:
   - 1.8.x
 install:
@@ -12,9 +14,10 @@ jobs:
   - stage: Build and Deploy
     go: 1.8.x
     script:
+      - export SOURCE_DATE_EPOCH=$(git show -s --format=%ci ${TRAVIS_TAG:-${TRAVIS_COMMIT}})
       - go build github.com/terinjokes/bakelite
       - "./bakelite github.com/terinjokes/bakelite"
-      - for i in bakelite-*; do tar -czf $i.tar.gz $i; done
+      - for i in bakelite-*; do tar --mtime="${SOURCE_DATE_EPOCH}" --owner=0 --group=0 --numeric-owner -c $i | gzip -n - > $i.tar.gz; done
       - shasum -a 512 bakelite-*.tar.gz | tee sha512sum.txt
     deploy:
       provider: releases
