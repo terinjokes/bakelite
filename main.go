@@ -61,6 +61,7 @@ func (o kvs) Strings() []string {
 }
 
 var cgo bool
+var ldflags string
 
 func main() {
 	// TODO: enable ARM after supporting GOARM
@@ -100,6 +101,7 @@ func main() {
 
 	flags := flag.NewFlagSet("bakelite", flag.ExitOnError)
 	flags.BoolVar(&cgo, "cgo", false, "Enables cgo (BYOTC)")
+	flags.StringVar(&ldflags, "ldflags", "", "arguments to pass on each go tool compile invocation")
 	flags.Usage = func() {
 		fmt.Println("bakelite - dev")
 	}
@@ -117,23 +119,22 @@ func main() {
 	var (
 		parallelJobs = runtime.NumCPU()
 		sem          = semaphore.NewWeighted(int64(parallelJobs))
-		out          = make([]error, len(platforms)*len(packages))
 		ctx          = context.Background()
 	)
 
 	fmt.Printf("info: running bakelite with %d jobs\n", parallelJobs)
 
-	for i, platform := range platforms {
-		for j, pkg := range packages {
+	for _, platform := range platforms {
+		for _, pkg := range packages {
 			if err := sem.Acquire(ctx, 1); err != nil {
 				log.Printf("failed to acquire semaphore: %s", err)
 				break
 			}
 
-			go func(i int, j int, platform Platform, pkg string) {
+			go func(platform Platform, pkg string) {
 				defer sem.Release(1)
-				out[i*j] = build(ctx, platform, pkg)
-			}(i, j, platform, pkg)
+				build(ctx, platform, pkg)
+			}(platform, pkg)
 		}
 	}
 
@@ -161,7 +162,19 @@ func build(ctx context.Context, platform Platform, pkg string) error {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	cmd := exec.CommandContext(context.Background(), "go", "build", "-o", name, pkg)
+	args := []string{
+		"build",
+		"-o",
+		name,
+	}
+
+	if ldflags != "" {
+		args = append(args, "-ldflags", ldflags)
+	}
+
+	args = append(args, pkg)
+
+	cmd := exec.CommandContext(context.Background(), "go", args...)
 	cmd.Env = env.Strings()
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
