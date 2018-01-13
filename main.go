@@ -109,7 +109,8 @@ Bakelite compiles the packages named by the import paths for multiple GOOS and
 GOARCH combinations. It does not install their results.
 
 When compiling a package, Bakelite writes the result to output files named
-after the source directory in the form "$package_$goos_$goarch".
+after the source directory in the form "$package_$goos_$goarch". The '.exe'
+suffix is added when writing a Windows executable.
 
 Multiple packages may be given to Bakelite, the result of each are saved as
 described in the preceding paragraph.
@@ -172,6 +173,10 @@ See also: go build, go install, go clean.
 
 func build(ctx context.Context, platform Platform, pkg string) error {
 	name := fmt.Sprintf("%s-%s-%s", filepath.Base(pkg), platform.OS, platform.Arch)
+
+	if platform.OS == OS_WINDOWS {
+		name += ".exe"
+	}
 
 	env := kvs{
 		"GOOS":   string(platform.OS),
