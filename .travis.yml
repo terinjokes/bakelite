@@ -9,11 +9,11 @@ install:
 jobs:
   include:
   - stage: test
-    go: 1.8.x
+    go: 1.9.x
     script:
       - go test -v $(go list ./... | grep -v /vendor/)
   - stage: Build and Deploy
-    go: 1.8.x
+    go: 1.9.x
     script:
       - export SOURCE_DATE_EPOCH=$(git show -s --format=%ci ${TRAVIS_TAG:-${TRAVIS_COMMIT}}^{commit})
       - go build github.com/terinjokes/bakelite
