@@ -210,7 +210,7 @@ func build(ctx context.Context, platform Platform, pkg string) error {
 	err := cmd.Run()
 
 	if err != nil {
-		log.Printf("fatal: There was an error! err='%s' stdout='%s' stderr='%s'", err, stdout.String(), stderr.String())
+		log.Printf("fatal: There was an error! goos='%s' goarch='%s' err='%s' stdout='%s' stderr='%s'", platform.OS, platform.Arch, err, stdout.String(), stderr.String())
 	}
 
 	return err
