@@ -10,44 +10,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
+	bflag "github.com/terinjokes/bakelite/internal/flag"
 	"golang.org/x/sync/semaphore"
 )
-
-type Arch string
-
-const (
-	ARCH_AMD64    Arch = "amd64"
-	ARCH_386      Arch = "386"
-	ARCH_ARM      Arch = "arm"
-	ARCH_ARM64    Arch = "arm64"
-	ARCH_PPC64    Arch = "ppc64"
-	ARCH_PPC64LE  Arch = "ppc64le"
-	ARCH_MIPS     Arch = "mips"
-	ARCH_MIPSLE   Arch = "mipsle"
-	ARCH_MIPS64   Arch = "mips64"
-	ARCH_MIPS64LE Arch = "mips64le"
-)
-
-type OS string
-
-const (
-	OS_ANDROID   OS = "android"
-	OS_DARWIN    OS = "darwin"
-	OS_DRAGONFLY OS = "dragonfly"
-	OS_FREEBSD   OS = "freebsd"
-	OS_LINUX     OS = "linux"
-	OS_NETBSD    OS = "netbsd"
-	OS_OPENBSD   OS = "openbsd"
-	OS_PLAN9     OS = "plan9"
-	OS_SOLARIS   OS = "solaris"
-	OS_WINDOWS   OS = "windows"
-)
-
-type Platform struct {
-	OS   OS
-	Arch Arch
-}
 
 type kvs map[string]string
 
@@ -62,46 +29,13 @@ func (o kvs) Strings() []string {
 
 var cgo bool
 var ldflags string
+var platformFields []string
 
 func main() {
-	// TODO: enable ARM after supporting GOARM
-	// TODO: probably should make this configurable…
-	platforms := []Platform{
-		//{OS_ANDROID, ARCH_ARM},
-		{OS_DARWIN, ARCH_386},
-		{OS_DARWIN, ARCH_AMD64},
-		//{OS_DARWIN, ARCH_ARM},
-		//{OS_DARWIN, ARCH_ARM64},
-		{OS_DRAGONFLY, ARCH_AMD64},
-		{OS_FREEBSD, ARCH_386},
-		{OS_FREEBSD, ARCH_AMD64},
-		//{OS_FREEBSD, ARCH_ARM},
-		{OS_LINUX, ARCH_386},
-		{OS_LINUX, ARCH_AMD64},
-		//{OS_LINUX, ARCH_ARM},
-		//{OS_LINUX, ARCH_ARM64},
-		{OS_LINUX, ARCH_PPC64},
-		{OS_LINUX, ARCH_PPC64LE},
-		{OS_LINUX, ARCH_MIPS},
-		{OS_LINUX, ARCH_MIPSLE},
-		{OS_LINUX, ARCH_MIPS64},
-		{OS_LINUX, ARCH_MIPS64LE},
-		{OS_NETBSD, ARCH_386},
-		{OS_NETBSD, ARCH_AMD64},
-		//{OS_NETBSD, ARCH_ARM},
-		{OS_OPENBSD, ARCH_386},
-		{OS_OPENBSD, ARCH_AMD64},
-		//{OS_OPENBSD, ARCH_ARM},
-		{OS_PLAN9, ARCH_386},
-		{OS_PLAN9, ARCH_AMD64},
-		{OS_SOLARIS, ARCH_AMD64},
-		{OS_WINDOWS, ARCH_386},
-		{OS_WINDOWS, ARCH_AMD64},
-	}
-
 	flags := flag.NewFlagSet("bakelite", flag.ExitOnError)
 	flags.BoolVar(&cgo, "cgo", false, "enables cgo (may require your own toolchain).")
 	flags.StringVar(&ldflags, "ldflags", "", "arguments to pass on each go tool compile invocation.")
+	flags.Var((*bflag.StringsValue)(&platformFields), "platforms", "modify the list of platforms built")
 	flags.Usage = func() {
 		fmt.Println("usage: bakelite [build flags] [packages]")
 		fmt.Println(`
@@ -124,8 +58,42 @@ The Bakelite specific flags:
 
 	-cgo
 		passes CGO_ENABLED=1 to the build environment.
-		May require a build toolchain for each GOOS and GOARCH
-		combination.
+		May require a build toolchain for each GOOS and GOARCH combination.
+	-platforms 'platform list'
+		modify the built platforms.
+		Platforms are prefixed with "-" to remove from the set and "+" to add
+		to the set. They can be specified sparsely as just the OS, or as a
+		complete GOOS/GOARCH declaration. If the special platform "-" is
+		provided as the first platform, the default set is disabled. See below
+		for the default list of platforms.
+
+By default Bakelite builds for the following platforms:
+
+	darwin/386
+	darwin/amd64
+	dragonfly/amd64
+	freebsd/386
+	freebsd/amd64
+	linux/386
+	linux/amd64
+	linux/ppc64
+	linux/ppc64le
+	linux/mips
+	linux/mipsle
+	linux/mips64
+	linux/mips64le
+	netbsd/386
+	netbsd/amd64
+	openbsd/386
+	openbsd/amd64
+	plan9/386
+	plan9/amd64
+	solaris/amd64
+	windows/386
+	windows/amd64
+
+All the flags that take a list of arguments accept a space-separated
+list of strings.
 
 For more about specifying packages, see 'go help packages'.
 For more about calling between Go and C/C++, run 'go help c'.
@@ -144,6 +112,18 @@ See also: go build, go install, go clean.
 		os.Exit(-1)
 	}
 
+	plBuilder, _ := NewPlatformBuilder()
+	if len(platformFields) > 0 && platformFields[0] == "-" {
+		platformFields = platformFields[1:]
+	} else {
+		plBuilder = plBuilder.WithDefaults()
+	}
+	if len(platformFields) != 0 {
+		plBuilder = parsePlatforms(plBuilder, platformFields)
+	}
+
+	platforms := plBuilder.Build()
+
 	var (
 		parallelJobs = runtime.NumCPU()
 		sem          = semaphore.NewWeighted(int64(parallelJobs))
@@ -152,22 +132,33 @@ See also: go build, go install, go clean.
 
 	fmt.Printf("info: running bakelite with %d jobs\n", parallelJobs)
 
+	var errored bool
 	for _, platform := range platforms {
 		for _, pkg := range packages {
 			if err := sem.Acquire(ctx, 1); err != nil {
 				log.Printf("failed to acquire semaphore: %s", err)
+				errored = true
 				break
 			}
 
 			go func(platform Platform, pkg string) {
 				defer sem.Release(1)
-				build(ctx, platform, pkg)
+				err := build(ctx, platform, pkg)
+
+				if err != nil {
+					errored = true
+				}
 			}(platform, pkg)
 		}
 	}
 
 	if err := sem.Acquire(ctx, int64(parallelJobs)); err != nil {
 		log.Printf("failed to acquire semaphore: %s", err)
+		errored = true
+	}
+
+	if errored {
+		os.Exit(1)
 	}
 }
 
@@ -219,4 +210,37 @@ func build(ctx context.Context, platform Platform, pkg string) error {
 	}
 
 	return err
+}
+
+func parsePlatforms(plBuilder *PlatformBuilder, fields []string) *PlatformBuilder {
+	for _, f := range fields {
+		switch f[0] {
+		case '-':
+			if strings.ContainsRune(f, '/') {
+				sp := strings.Split(f[1:], "/")
+				p := Platform{
+					OS:   OS(sp[0]),
+					Arch: Arch(sp[1]),
+				}
+
+				plBuilder = plBuilder.WithoutPlatform(p)
+			} else {
+				plBuilder = plBuilder.WithoutOS(OS(f[1:]))
+			}
+		case '+':
+			if strings.ContainsRune(f, '/') {
+				sp := strings.Split(f[1:], "/")
+				p := Platform{
+					OS:   OS(sp[0]),
+					Arch: Arch(sp[1]),
+				}
+
+				plBuilder = plBuilder.WithPlatform(p)
+			} else {
+				plBuilder = plBuilder.WithOS(OS(f[1:]))
+			}
+		}
+	}
+
+	return plBuilder
 }
