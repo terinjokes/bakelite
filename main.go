@@ -100,10 +100,37 @@ func main() {
 	}
 
 	flags := flag.NewFlagSet("bakelite", flag.ExitOnError)
-	flags.BoolVar(&cgo, "cgo", false, "Enables cgo (BYOTC)")
-	flags.StringVar(&ldflags, "ldflags", "", "arguments to pass on each go tool compile invocation")
+	flags.BoolVar(&cgo, "cgo", false, "enables cgo (may require your own toolchain).")
+	flags.StringVar(&ldflags, "ldflags", "", "arguments to pass on each go tool compile invocation.")
 	flags.Usage = func() {
-		fmt.Println("bakelite - dev")
+		fmt.Println("usage: bakelite [build flags] [packages]")
+		fmt.Println(`
+Bakelite compiles the packages named by the import paths for multiple GOOS and
+GOARCH combinations. It does not install their results.
+
+When compiling a package, Bakelite writes the result to output files named
+after the source directory in the form "$package_$goos_$goarch".
+
+Multiple packages may be given to Bakelite, the result of each are saved as
+described in the preceding paragraph.
+
+The build flags recognized by Bakelite:
+
+	-ldflags 'flag list'
+		arguments to pass on each go tool compile invocation.
+
+The Bakelite specific flags:
+
+	-cgo
+		passes CGO_ENABLED=1 to the build environment.
+		May require a build toolchain for each GOOS and GOARCH
+		combination.
+
+For more about specifying packages, see 'go help packages'.
+For more about calling between Go and C/C++, run 'go help c'.
+
+See also: go build, go install, go clean.
+			`)
 	}
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		flags.Usage()
