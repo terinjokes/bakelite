@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  name = "github.com/google/go-cmp"
+  packages = ["cmp","cmp/internal/diff","cmp/internal/function","cmp/internal/value"]
+  revision = "8099a9787ce5dc5984ed879a3bda47dc730a8e97"
+  version = "v0.1.0"
+
+[[projects]]
   branch = "master"
   name = "golang.org/x/net"
   packages = ["context"]
@@ -16,6 +22,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "1b7a27daae87f4f213b3475a08fd7367804c2755750bf27adb8c32ada7c9bdae"
+  inputs-digest = "14999a24917f91009d496a5729d3a7dd84e62b29e070424212d8de53cc71b47e"
   solver-name = "gps-cdcl"
   solver-version = 1
