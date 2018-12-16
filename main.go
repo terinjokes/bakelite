@@ -124,6 +124,8 @@ See also: go build, go install, go clean.
 
 	platforms := plBuilder.Build()
 
+	environ := parseEnvironment(os.Environ())
+
 	var (
 		parallelJobs = runtime.NumCPU()
 		sem          = semaphore.NewWeighted(int64(parallelJobs))
@@ -143,7 +145,7 @@ See also: go build, go install, go clean.
 
 			go func(platform Platform, pkg string) {
 				defer sem.Release(1)
-				err := build(ctx, platform, pkg)
+				err := build(ctx, environ, platform, pkg)
 
 				if err != nil {
 					errored = true
@@ -162,19 +164,20 @@ See also: go build, go install, go clean.
 	}
 }
 
-func build(ctx context.Context, platform Platform, pkg string) error {
+func build(ctx context.Context, environ kvs, platform Platform, pkg string) error {
 	name := fmt.Sprintf("%s-%s-%s", filepath.Base(pkg), platform.OS, platform.Arch)
 
 	if platform.OS == OS_WINDOWS {
 		name += ".exe"
 	}
 
-	env := kvs{
-		"GOOS":   string(platform.OS),
-		"GOARCH": string(platform.Arch),
-		"GOROOT": os.Getenv("GOROOT"),
-		"GOPATH": os.Getenv("GOPATH"),
+	env := kvs{}
+	for key, val := range environ {
+		env[key] = val
 	}
+
+	env["GOOS"] = string(platform.OS)
+	env["GOARCH"] = string(platform.Arch)
 
 	if cgo {
 		env["CGO_ENABLED"] = "1"
@@ -243,4 +246,14 @@ func parsePlatforms(plBuilder *PlatformBuilder, fields []string) *PlatformBuilde
 	}
 
 	return plBuilder
+}
+
+func parseEnvironment(environ []string) kvs {
+	env := kvs{}
+	for _, s := range environ {
+		split := strings.SplitN(s, "=", 2)
+		env[split[0]] = split[1]
+	}
+
+	return env
 }
