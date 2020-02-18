@@ -1,19 +1,13 @@
 language: go
-dist: trusty
-sudo: false
-
-install:
-  - go get github.com/golang/dep/cmd/dep
-  - dep ensure
 
 jobs:
   include:
   - stage: test
-    go: 1.9.x
+    go: 1.13.x
     script:
-      - go test -v $(go list ./... | grep -v /vendor/)
+      - go test ./...
   - stage: Build and Deploy
-    go: 1.9.x
+    go: 1.13.x
     script:
       - export SOURCE_DATE_EPOCH=$(git show -s --format=%ci ${TRAVIS_TAG:-${TRAVIS_COMMIT}}^{commit})
       - go build github.com/terinjokes/bakelite
@@ -22,8 +16,8 @@ jobs:
       - shasum -a 512 bakelite-*.tar.gz | tee sha512sum.txt
     deploy:
       provider: releases
-      api_key:
-        secure: V5ZA8knEw5y9tYrUCJSffVTtyY+qKENNgpE0fXP3EKjI7H3NqGspLrm+oxCs1ym35YVFFYglCB2plD2JdnRaOe3VDi3/QJqpLQpI44OkNm8S73HgjNjXYIQypjP19uHfxBUPLX8BVwqrKKUrNQ7vCMc1JCJFf6qxB0Evd0355j5/VdtmQNM1MyVWwt+3XFo3VUfBP7RLuhdOmDQc1uSeQTqlG+xim5N8VIuINsfECXCoKnEhS2zCbHz+8dJgBtmqOeUHYIKI1WXpLqj/wLTjGvViaNwzUCYndS7PwX3dQcZVm1kikgdj1L6w6Pow0SfE8krhdKSIGzWJoiNMyYC0aiwomKpSitK9DK/cQLJbhCVpx19iONUGcfJ8Hr1I40MAF2jt9cThEQgnlHdkfkjRFGNWU7RHDkrW8L1nQ3kUA0t/QOXYl7SLRcTgWvwc5LuBx5vYDV1M4kb3RowNiMKKrII82Tcjswqe63fxXe0B+73Ksza/3Vi9VDki/UyDOVNEvMinF5xVlYOQgcFfj0r8ZAXjWeylYdLTTnn8X+6rt4waaYdualyb4Bf8S4LmRVHCD7Jl1+Xtv1dRM7Oyq7d0weLtyzvV9J1CjJsPKJxujuBFWjQv4fn/HPJEljXhNnFDoNgmgN0yXx4LNM+uB8IVzRjpNXbDnq2mGeYD4XXlCLE=
+      token:
+        secure: vZMPoI0umyg3AR5C9BSsfI0LyvnMivFLUsgwoCKvfSoqDHf3Q8rQvSsvSYqCkZ3zJY4KoAhq/oAPdXRmwYWD3l9RQxnHt8od2cvzZOJISTBWwBKqj9TjXPrVjPy+9zAHtsk4E6jISaWpj9qka4KVwyfvsCOgPs2E7MZ6tMaP2t7EXNk2xwdyPZjHvSmqdrB+ApyZNlkJ16//nXZJrBWgqk0Z7B32Ow7Nx6q4dWe6uBzoLv9X5qKEi9GfhEde/0VRLG3j7er/7tL0DOFFbo4GGFre5krw7TJ2d2f9EETy2LN4xxAm+f+BVxHOTOprTz7pmI472yAup20VrPm4YRkrCYOmFfYjFdMNa+Tbya/SLkvwTDWElk0QPZ+VYiv49N9NnGv4QM7N9kuBmGqY9z4WnINpuHA54fasBn8+ypnbK1CK8lbJUQbBsdMLieUTdTCc2xaxsDMR/QS5/iH2nQX98NfPJWZkZ4IZvqK5Bv+50hJUlBZGol+Qu+36+q6y3T7DDVz+PmWPdNA3o0gJyPmxnV/nYdV1q2SofovZBfeWwrNWt2xzTW3H+nx/aBZdZU9nUtvPUkBzoKtpSzUhtSTyysEU6Z+yymWW0xdmqASUckG5rjsjfXgCevbVOx9n/BZwQ8w4eOKB9lnrljagYVBfj77Gcgh3i69n38O+Bf9frqA=
       skip_cleanup: true
       file_glob: true
       file:
